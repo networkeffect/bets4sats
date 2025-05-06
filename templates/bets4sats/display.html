@@ -1,0 +1,270 @@
+{% extends "public.html" %} {% block page %}
+<div class="row q-col-gutter-md justify-center">
+  <div class="col-12 col-md-7 col-lg-6 q-gutter-y-md">
+    <q-card class="q-pa-lg">
+      <img v-if="banner != ''" :src="banner" style="max-width: 100%; max-height: 25vh; object-fit: contain; margin-bottom: 24px;" />
+      <q-card-section class="q-pa-none">
+        <h3 class="q-my-none">{{ competition_name }}</h3>
+        <br />
+        <p class="q-my-none text-italic">
+          DISCLAIMER: This server does not use external sources to check competition results.
+          It simply relies on the server admin to enter the winning party and trigger the payouts. 
+          Use this app only if you trust the server admin !
+            <br />
+          Note: The admin takes 1% fee from the winner and will additionally to the normal network
+          fees (usually 1% for normal payments or 2 sats for small payments.
+        </p>
+        <br />
+        <h5 class="q-my-none" style="white-space: pre-wrap;">{{ competition_info }}</h5>
+        <br />
+        <div v-if="!isCompetitionOpen">
+          <h4 class="q-my-none">No more bets possible. 
+          <br/>
+          You will be notified right after this competition's timeframe.</h4>
+          <br/>
+        </div>
+        <q-form @submit="Invoice()" class="q-gutter-md">
+          <q-list>
+            <q-item
+              v-for="(choice, index) in choices"
+              :key="choice.title"
+              tag="label"
+              v-ripple
+            >
+              <q-item-section avatar v-if="isCompetitionOpen">
+                <q-radio v-model="formDialog.data.choice" :val="index"></q-radio>
+              </q-item-section>
+              <q-item-section>
+                <q-item-label>
+                  {% raw %}
+                  {{ choice.title }} (total bets: {{ choice.total }} sats)
+                  {% endraw %}
+                  <strong v-if="index === {{ competition_winning_choice }}">- WON!</strong>
+                </q-item-label>
+              </q-item-section>
+            </q-item>
+          </q-list>
+          <q-input
+            v-if="isCompetitionOpen"
+            filled
+            dense
+            v-model.number="formDialog.data.amount"
+            type="number"
+            label="Amount in sats (between {{ competition_min_bet }} - {{ competition_max_bet }}) "
+          ></q-input>
+          <q-input
+            v-if="isCompetitionOpen"
+            filled
+            dense
+            v-model.trim="formDialog.data.reward_target"
+            type="text"
+            label="Your lightning-address, lnurl-pay or wallet-id (on the same LNbits server) "
+          ></q-input>
+
+          <div class="row q-mt-lg" v-if="isCompetitionOpen">
+            <q-btn
+              unelevated
+              color="primary"
+              :disable="formDialog.data.reward_target == '' || !formDialog.data.amount || Number(formDialog.data.amount) < {{ competition_min_bet }} || Number(formDialog.data.amount) > {{ competition_max_bet }} || paymentReq"
+              type="submit"
+            >
+              Submit
+            </q-btn>
+            <q-btn
+              @click="resetForm"
+              flat
+              color="grey"
+              class="q-ml-auto"
+            >
+              Cancel
+            </q-btn>
+          </div>
+        </q-form>
+      </q-card-section>
+    </q-card>
+
+    <q-card v-show="ticketLink.show" class="q-pa-lg">
+      <div class="text-center q-mb-lg">
+        <q-btn
+          unelevated
+          size="xl"
+          :href="ticketLink.data.link"
+          target="_blank"
+          color="primary"
+          type="a"
+          >Link to your ticket! Please save this url.</q-btn
+        >
+        <br /><br />
+        <p>You'll be redirected in a few moments...</p>
+      </div>
+    </q-card>
+  </div>
+
+  <q-dialog v-model="receive.show" position="top" @hide="closeReceiveDialog">
+    <q-card
+      v-if="!receive.paymentReq"
+      class="q-pa-lg q-pt-xl lnbits__dialog-card"
+    >
+    </q-card>
+    <q-card v-else class="q-pa-lg q-pt-xl lnbits__dialog-card">
+      <div class="text-center q-mb-lg">
+        <a class="text-secondary" :href="'lightning:' + receive.paymentReq">
+          <q-responsive :ratio="1" class="q-mx-xl">
+            <qrcode
+              :value="'lightning:' + receive.paymentReq.toUpperCase()"
+              :options="{width: 340}"
+              class="rounded-borders"
+            ></qrcode>
+          </q-responsive>
+        </a>
+      </div>
+      <div class="row q-mt-lg">
+        <q-btn outline color="grey" @click="copyText(receive.paymentReq)"
+          >Copy invoice</q-btn
+        >
+        <q-btn v-close-popup flat color="grey" class="q-ml-auto">Close</q-btn>
+      </div>
+    </q-card>
+  </q-dialog>
+</div>
+
+{% endblock %} {% block scripts %}
+<script>
+  Vue.component(VueQrcode.name, VueQrcode)
+
+  new Vue({
+    el: '#vue',
+    mixins: [windowMixin],
+    data: function () {
+      return {
+        banner: {{ competition_banner | safe }},
+        isCompetitionOpen: '{{ competition_state }}' === 'INITIAL' && {{ competition_amount_tickets | safe }} > 0 && Date.now() < new Date('{{ competition_closing_datetime }}').getTime(),
+        choices: {{ competition_choices | safe }},
+        paymentReq: null,
+        redirectUrl: null,
+        formDialog: {
+          show: false,
+          data: {
+            amount: 0,
+            reward_target: '',
+            choice: 0,
+          }
+        },
+        ticketLink: {
+          show: false,
+          data: {
+            link: ''
+          }
+        },
+        receive: {
+          show: false,
+          status: 'pending',
+          paymentReq: null
+        }
+      }
+    },
+
+    mounted: function () {
+      const self = this
+      const autoClose = () => {
+        const timeToClose = new Date('{{ competition_closing_datetime }}').getTime() - Date.now()
+        console.info('timeToClose', timeToClose)
+        if (timeToClose <= 0) {
+          self.isCompetitionOpen = false
+          return
+        }
+        setTimeout(autoClose, Math.min(timeToClose, 2**31 - 1))
+      }
+      autoClose()
+    },
+
+    methods: {
+      resetForm: function (e) {
+        e.preventDefault()
+        this.formDialog.data = {
+          amount: 0,
+          reward_target: '',
+          choice: 0,
+        }
+      },
+
+      closeReceiveDialog: function () {
+        var checker = this.receive.paymentChecker
+        dismissMsg()
+        clearInterval(paymentChecker)
+      },
+      Invoice: function () {
+        var self = this
+        axios
+          .post(
+            '/bets4sats/api/v1/tickets/{{ competition_id }}',
+            {
+              reward_target: self.formDialog.data.reward_target,
+              amount: Number(self.formDialog.data.amount),
+              choice: Number(self.formDialog.data.choice), // safety
+            }
+          )
+          .then(function (response) {
+            self.paymentReq = response.data.payment_request
+            self.ticketId = response.data.ticket_id
+
+            dismissMsg = self.$q.notify({
+              timeout: 0,
+              message: 'Waiting for payment...'
+            })
+
+            self.receive = {
+              show: true,
+              status: 'pending',
+              paymentReq: self.paymentReq
+            }
+
+            paymentChecker = setInterval(function () {
+              axios
+                .get(
+                  '/bets4sats/api/v1/tickets/' +
+                    '{{ competition_id }}/' +
+                    self.ticketId
+                )
+                .then(function (res) {
+                  if (res.data.paid) {
+                    clearInterval(paymentChecker)
+                    dismissMsg()
+                    self.formDialog.data.amount = 0
+                    self.formDialog.data.reward_target = ''
+
+                    self.$q.notify({
+                      type: 'positive',
+                      message: 'Sent, thank you!',
+                      icon: null
+                    })
+                    self.receive = {
+                      show: false,
+                      status: 'complete',
+                      paymentReq: null
+                    }
+
+                    self.ticketLink = {
+                      show: true,
+                      data: {
+                        link: '/bets4sats/tickets/' + self.ticketId
+                      }
+                    }
+                    setTimeout(function () {
+                      window.location.href = '/bets4sats/tickets/' + self.ticketId
+                    }, 3000)
+                  }
+                })
+                .catch(function (error) {
+                  LNbits.utils.notifyApiError(error)
+                })
+            }, 2000)
+          })
+          .catch(function (error) {
+            LNbits.utils.notifyApiError(error)
+          })
+      }
+    }
+  })
+</script>
+{% endblock %}

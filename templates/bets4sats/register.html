@@ -1,0 +1,198 @@
+{% extends "public.html" %} {% block page %}
+
+<div class="row q-col-gutter-md justify-center">
+  <div class="col-12 col-md-7 col-lg-6 q-gutter-y-md">
+    <q-card class="q-pa-lg">
+      <q-card-section class="q-pa-none">
+        <center>
+          <h3 class="q-my-none">{{ competition_name }} - Registration</h3>
+          <br />
+          <h4 class="q-my-none">Competition Id: {{ competition_id }}</h4>
+          <br />
+
+          <q-btn unelevated color="primary" @click="showCamera" size="xl"
+            >Scan ticket</q-btn
+          >
+        </center>
+      </q-card-section>
+    </q-card>
+
+    <q-card>
+      <q-card-section>
+        <q-table
+          dense
+          flat
+          :data="tickets"
+          row-key="id"
+          :columns="ticketsTable.columns"
+          :pagination.sync="ticketsTable.pagination"
+        >
+          {% raw %}
+          <template v-slot:header="props">
+            <q-tr :props="props">
+              <q-th auto-width></q-th>
+              <q-th v-for="col in props.cols" :key="col.name" :props="props">
+                {{ col.label }}
+              </q-th>
+            </q-tr>
+          </template>
+          <template v-slot:body="props">
+            <q-tr :props="props">
+              <q-td auto-width>
+                <q-btn
+                  unelevated
+                  dense
+                  size="xs"
+                  icon="local_activity"
+                  :color="($q.dark.isActive) ? 'grey-7' : 'grey-5'"
+                  type="a"
+                  :href="props.row.displayUrl"
+                  target="_blank"
+                ></q-btn>
+              </q-td>
+
+              <q-td v-for="col in props.cols" :key="col.name" :props="props">
+                {{ col.value }}
+              </q-td>
+            </q-tr>
+          </template>
+          {% endraw %}
+        </q-table>
+      </q-card-section>
+    </q-card>
+  </div>
+
+  <q-dialog v-model="sendCamera.show" position="top">
+    <q-card class="q-pa-lg q-pt-xl">
+      <div class="text-center q-mb-lg">
+        <qrcode-stream
+          @decode="decodeQR"
+          class="rounded-borders"
+        ></qrcode-stream>
+      </div>
+      <div class="row q-mt-lg">
+        <q-btn @click="closeCamera" flat color="grey" class="q-ml-auto"
+          >Cancel</q-btn
+        >
+      </div>
+    </q-card>
+  </q-dialog>
+</div>
+{% endblock %} {% block scripts %}
+<script>
+  Vue.component(VueQrcode.name, VueQrcode)
+  Vue.use(VueQrcodeReader)
+  const choices = {{ competition_choices | safe }}
+  const mapTicket = function (obj) {
+    obj.date = Quasar.utils.date.formatDate(
+      new Date(obj.time * 1000),
+      'YYYY-MM-DD HH:mm'
+    )
+    obj.displayUrl = '/bets4sats/tickets/' + obj.id
+    obj.choiceText = '#' + obj.choice + ' - ' + choices[obj.choice].title
+    if (obj.reward_failure) {
+      obj.rewardStatus = 'Failed: ' + obj.reward_failure
+    } else if (obj.reward_payment_hash) {
+      obj.rewardStatus = 'Success'
+    } else {
+      obj.rewardStatus = ''
+    }
+    const rewardMSat = '000' + obj.reward_msat
+    const wholeSats = rewardMSat.slice(0, -3).replace(/^0+/, '')
+    const fractionSats = '.' + rewardMSat.slice(-3).replace(/0+$/, '')
+    obj.rewardSats = (wholeSats || '0') + (fractionSats !== '.' ? fractionSats : '')
+    return obj
+  }
+  new Vue({
+    el: '#vue',
+    mixins: [windowMixin],
+    data: function () {
+      return {
+        tickets: [],
+        ticketsTable: {
+          columns: [
+            {name: 'id', align: 'left', label: 'ID', field: 'id'},
+            {name: 'state', align: 'left', label: 'State', field: 'state'},
+            {name: 'reward_target', align: 'left', label: 'Reward Target', field: 'reward_target'},
+            {name: 'amount', align: 'left', label: 'Amount (sats)', field: 'amount'},
+            {name: 'rewardStatus', align: 'left', label: 'Reward Status', field: 'rewardStatus'},
+            {name: 'rewardSats', align: 'left', label: 'Rewarded (sats)', field: 'rewardSats'},
+            {name: 'choiceText', align: 'left', label: 'Choice', field: 'choiceText'},
+          ],
+          pagination: {
+            rowsPerPage: 10
+          }
+        },
+        sendCamera: {
+          show: false,
+          camera: 'auto'
+        }
+      }
+    },
+    methods: {
+      closeCamera: function () {
+        this.sendCamera.show = false
+      },
+      showCamera: function () {
+        this.sendCamera.show = true
+      },
+      decodeQR: function (res) {
+        this.sendCamera.show = false
+        var self = this
+        const [prefix, ticketId] = res.split('//')
+        if (prefix !== 'bets4sats:') {
+          self.$q.notify({
+            type: 'negative',
+            message: 'Invalid QR'
+          })
+        }
+
+        LNbits.api
+          .request(
+            'GET',
+            '/bets4sats/api/v1/register/ticket/' + ticketId
+          )
+          .then(function (response) {
+            if (response.data.competition !== '{{ competition_id }}') {
+              self.$q.notify({
+                type: 'negative',
+                message: 'Ticket belongs to a different competition'
+              })
+              return
+            }
+            self.$q.notify({
+              type: 'positive',
+              message: 'Found!'
+            })
+            setTimeout(function () {
+              window.location.href = '/bets4sats/tickets/' + response.data.id
+            }, 2000)
+          })
+          .catch(function (error) {
+            LNbits.utils.notifyApiError(error)
+          })
+      },
+      getCompetitionTickets: function () {
+        var self = this
+        console.log('obj')
+        LNbits.api
+          .request(
+            'GET',
+            '/bets4sats/api/v1/competitiontickets/{{ competition_id }}/{{ register_id }}'
+          )
+          .then(function (response) {
+            self.tickets = response.data.map(function (obj) {
+              return mapTicket(obj)
+            })
+          })
+          .catch(function (error) {
+            LNbits.utils.notifyApiError(error)
+          })
+      }
+    },
+    created: function () {
+      this.getCompetitionTickets()
+    }
+  })
+</script>
+{% endblock %}

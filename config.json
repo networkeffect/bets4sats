@@ -1,0 +1,10 @@
+{
+	"name": "Bets4Sats",
+	"short_description": "Bet with friends on competitions",
+	"tile": "/bets4sats/static/image/bets4sats.png",
+	"min_lnbits_version": "1.0.0",
+	"contributors": ["benarc", "oren-z0"],
+"description_md": "https://raw.githubusercontent.com/lnbits/events/main/description.md",
+  "terms_and_conditions_md": "https://raw.githubusercontent.com/lnbits/events/main/toc.md",
+  "license": "MIT"
+}

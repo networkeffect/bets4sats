@@ -1,0 +1,14 @@
+{
+  "name": "bets4sats",
+  "version": "1.0.0",
+  "description": "LNbits betting extension – dev helpers",
+  "scripts": {
+    "format": "prettier --write \"static/**/*.js\"",
+    "typecheck": "pyright"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "prettier": "^3.2.5",
+    "pyright": "^1.1.358"
+  }
+}
