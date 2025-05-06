@@ -15,7 +15,7 @@ db = Database("ext_bets4sats")
 
 
 bets4sats_ext: APIRouter = APIRouter(prefix="/bets4sats", tags=["Bets4Sats"])
-events_ext.include_router(bets4sats_ext)
+
 
 bets4sats_static_files = [
     {
@@ -44,7 +44,6 @@ from .tasks import (
 )
 from . import views  # noqa: F401,E402
 from . import views_api  # noqa: F401,E402
-
 
 
 def bets4sats_start() -> None:
