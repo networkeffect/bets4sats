@@ -14,8 +14,8 @@ PRIZE_FEE_PERCENT = 1
 
 async def purge_tickets_loop():
     while True:
-        sleep(TICKET_PURGE_TIME // 2)
-        await competitions = await get_all_competitions()
+        await asyncio.sleep(TICKET_PURGE_TIME // 2)
++        competitions = await get_all_competitions()
         for competition in competitions:
             await purge_expired_tickets(competition.id)
 
