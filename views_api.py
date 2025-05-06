@@ -10,7 +10,9 @@ from starlette.exceptions import HTTPException
 
 from lnbits.core.crud import get_user, create_ticket, INVOICE_EXPIRY
 from lnbits.core.services import create_invoice
-from lnbits.decorators import WalletTypeInfo, get_key_type
+from lnbits.decorators import ( 
+    WalletTypeInfo, 
+    get_key_type, )
 
 from . import bets4sats_ext
 from .tasks import reward_ticket_ids_queue
